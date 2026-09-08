@@ -1,0 +1,101 @@
+name: Build macOS app
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "main.py"
+      - "parser.py"
+      - "requirements.txt"
+      - "assets/**"
+      - ".github/workflows/build-macos.yml"
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-14      # Apple Silicon (arm64)
+            arch: arm64
+          - os: macos-13      # Intel (x86_64)
+            arch: x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Установка зависимостей
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade pyinstaller
+          python -m pip install -r requirements.txt
+
+      - name: Установка Chromium для Playwright
+        run: python -m playwright install chromium
+
+      - name: Обрезка лишнего варианта браузера (headless-shell не используется — launch() всегда идёт с channel="chromium")
+        run: |
+          BROWSERS_DIR="$HOME/Library/Caches/ms-playwright"
+          echo "Содержимое $BROWSERS_DIR:"
+          ls "$BROWSERS_DIR"
+          rm -rf "$BROWSERS_DIR"/chromium_headless_shell-*
+          mkdir -p pw-browsers
+          cp -R "$BROWSERS_DIR"/chromium-* pw-browsers/ 2>/dev/null || true
+          cp -R "$BROWSERS_DIR"/ffmpeg-* pw-browsers/ 2>/dev/null || true
+          echo "Итоговый pw-browsers:"
+          ls pw-browsers
+
+      - name: Сборка иконки .icns из assets/acrelis_icon.ico (не критично, если не получится)
+        continue-on-error: true
+        run: |
+          python -c "
+from PIL import Image
+img = Image.open('assets/acrelis_icon.ico')
+img = img.convert('RGBA')
+img.save('acrelis_icon.png')
+"
+          mkdir -p acrelis.iconset
+          sips -z 16 16     acrelis_icon.png --out acrelis.iconset/icon_16x16.png
+          sips -z 32 32     acrelis_icon.png --out acrelis.iconset/icon_16x16@2x.png
+          sips -z 32 32     acrelis_icon.png --out acrelis.iconset/icon_32x32.png
+          sips -z 64 64     acrelis_icon.png --out acrelis.iconset/icon_32x32@2x.png
+          sips -z 128 128   acrelis_icon.png --out acrelis.iconset/icon_128x128.png
+          sips -z 256 256   acrelis_icon.png --out acrelis.iconset/icon_128x128@2x.png
+          sips -z 256 256   acrelis_icon.png --out acrelis.iconset/icon_256x256.png
+          sips -z 512 512   acrelis_icon.png --out acrelis.iconset/icon_256x256@2x.png
+          sips -z 512 512   acrelis_icon.png --out acrelis.iconset/icon_512x512.png
+          iconutil -c icns acrelis.iconset -o assets/acrelis_icon.icns
+
+      - name: Сборка .app через PyInstaller
+        run: |
+          ICON_ARG=""
+          if [ -f "assets/acrelis_icon.icns" ]; then
+            ICON_ARG="--icon assets/acrelis_icon.icns"
+          fi
+          python -m PyInstaller --noconfirm --clean \
+            --onefile \
+            --windowed \
+            --name "ParserYandex" \
+            $ICON_ARG \
+            --collect-all customtkinter \
+            --collect-all playwright \
+            --collect-all docx \
+            --collect-all openpyxl \
+            --add-data "pw-browsers:ms-playwright" \
+            --add-data "assets:assets" \
+            main.py
+
+      - name: Упаковка .app в .zip (сохраняет права/структуру бандла)
+        run: |
+          cd dist
+          ditto -c -k --sequesterRsrc --keepParent "ParserYandex.app" "ParserYandex-macos-${{ matrix.arch }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ParserYandex-macos-${{ matrix.arch }}
+          path: dist/ParserYandex-macos-${{ matrix.arch }}.zip
+          retention-days: 30
