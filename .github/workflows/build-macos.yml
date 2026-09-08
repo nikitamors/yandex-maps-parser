@@ -52,12 +52,7 @@ jobs:
       - name: Сборка иконки .icns из assets/acrelis_icon.ico (не критично, если не получится)
         continue-on-error: true
         run: |
-          python -c "
-from PIL import Image
-img = Image.open('assets/acrelis_icon.ico')
-img = img.convert('RGBA')
-img.save('acrelis_icon.png')
-"
+          python -c "from PIL import Image; Image.open('assets/acrelis_icon.ico').convert('RGBA').save('acrelis_icon.png')"
           mkdir -p acrelis.iconset
           sips -z 16 16     acrelis_icon.png --out acrelis.iconset/icon_16x16.png
           sips -z 32 32     acrelis_icon.png --out acrelis.iconset/icon_16x16@2x.png
