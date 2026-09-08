@@ -13,15 +13,10 @@ on:
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-14      # Apple Silicon (arm64)
-            arch: arm64
-          - os: macos-13      # Intel (x86_64)
-            arch: x86_64
-    runs-on: ${{ matrix.os }}
+    # Только Apple Silicon (arm64) — GitHub убрал бесплатные Intel-раннеры для macOS
+    # (macos-13 полностью снят с флота, x86_64 остался лишь в платном large-тире).
+    # arm64 покрывает все Mac с конца 2020 года (M1 и новее).
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
@@ -94,10 +89,10 @@ jobs:
         run: |
           cd dist
           cp -R ../pw-browsers ms-playwright
-          zip -ry "ParserYandex-macos-${{ matrix.arch }}.zip" "ParserYandex.app" "ms-playwright"
+          zip -ry "ParserYandex-macos-arm64.zip" "ParserYandex.app" "ms-playwright"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ParserYandex-macos-${{ matrix.arch }}
-          path: dist/ParserYandex-macos-${{ matrix.arch }}.zip
+          name: ParserYandex-macos-arm64
+          path: dist/ParserYandex-macos-arm64.zip
           retention-days: 30
