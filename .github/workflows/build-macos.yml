@@ -14,6 +14,7 @@ on:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: macos-14      # Apple Silicon (arm64)
@@ -71,8 +72,14 @@ jobs:
           if [ -f "assets/acrelis_icon.icns" ]; then
             ICON_ARG="--icon assets/acrelis_icon.icns"
           fi
+          # --onedir (не --onefile): PyInstaller сам рекомендует onedir для --windowed на macOS
+          # (onefile+windowed на маке — deprecated, "a .app bundle can not be a single file").
+          # ms-playwright сюда НЕ передаём через --add-data: PyInstaller при онефайл/онедир-сборке
+          # пытается ad-hoc codesign'ить каждый найденный Mach-O бинарник, а вложенный .app самого
+          # Chromium (со своими Frameworks) от такого переподписания ломается. Кладём браузер
+          # рядом с готовым .app отдельным шагом ниже — main.py умеет искать его там на macOS.
           python -m PyInstaller --noconfirm --clean \
-            --onefile \
+            --onedir \
             --windowed \
             --name "ParserYandex" \
             $ICON_ARG \
@@ -80,14 +87,14 @@ jobs:
             --collect-all playwright \
             --collect-all docx \
             --collect-all openpyxl \
-            --add-data "pw-browsers:ms-playwright" \
             --add-data "assets:assets" \
             main.py
 
-      - name: Упаковка .app в .zip (сохраняет права/структуру бандла)
+      - name: Разместить браузер рядом с .app и упаковать в .zip
         run: |
           cd dist
-          ditto -c -k --sequesterRsrc --keepParent "ParserYandex.app" "ParserYandex-macos-${{ matrix.arch }}.zip"
+          cp -R ../pw-browsers ms-playwright
+          zip -ry "ParserYandex-macos-${{ matrix.arch }}.zip" "ParserYandex.app" "ms-playwright"
 
       - uses: actions/upload-artifact@v4
         with:

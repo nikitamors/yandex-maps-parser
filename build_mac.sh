@@ -22,8 +22,13 @@ if [ -f "assets/acrelis_icon.icns" ]; then
 fi
 
 echo "[3/4] Сборка .app (несколько минут)..."
+# --onedir, а не --onefile: на macOS для --windowed это официально рекомендованный режим
+# (onefile+windowed — deprecated). ms-playwright НЕ передаём через --add-data — PyInstaller
+# пытается ad-hoc codesign'ить каждый найденный внутри Mach-O бинарник, а вложенный .app
+# самого Chromium (со своими Frameworks) от переподписания ломается. Кладём браузер рядом
+# с готовым .app ниже — main.py ищет его там на macOS.
 python3 -m PyInstaller --noconfirm --clean \
-    --onefile \
+    --onedir \
     --windowed \
     --name "ParserYandex" \
     $ICON_ARG \
@@ -31,9 +36,11 @@ python3 -m PyInstaller --noconfirm --clean \
     --collect-all playwright \
     --collect-all docx \
     --collect-all openpyxl \
-    --add-data "pw-browsers:ms-playwright" \
     --add-data "assets:assets" \
     main.py
 
-echo "[4/4] Готово: dist/ParserYandex.app"
-echo "Временную папку pw-browsers можно удалить: rm -rf pw-browsers build ParserYandex.spec"
+echo "[4/4] Размещаю браузер рядом с .app..."
+cp -R pw-browsers dist/ms-playwright
+
+echo "Готово: dist/ParserYandex.app (запускать вместе с папкой dist/ms-playwright рядом)"
+echo "Временное можно удалить: rm -rf pw-browsers build ParserYandex.spec"

@@ -2,10 +2,22 @@
 import os
 import sys
 
-# При запуске из .exe (PyInstaller) указываем путь к встроенному Chromium
+# При запуске из собранного приложения указываем путь к встроенному Chromium.
 if getattr(sys, "frozen", False):
-    _bundled = os.path.join(getattr(sys, "_MEIPASS", ""), "ms-playwright")
-    if os.path.isdir(_bundled):
+    if sys.platform == "darwin":
+        # На macOS браузер НЕ бандлим внутрь .app через PyInstaller --add-data:
+        # PyInstaller пытается ad-hoc codesign'ить каждый Mach-O бинарник, который
+        # к нему попадает, а вложенный .app самого Chromium (со своими Frameworks)
+        # при таком переподписании ломается ("bundle format unrecognized").
+        # Вместо этого папка ms-playwright лежит РЯДОМ с ParserYandex.app (см. build-macos.yml),
+        # ищем её, поднимаясь от sys.executable до границы .app и на уровень выше.
+        _dir = os.path.dirname(os.path.abspath(sys.executable))
+        while _dir and not _dir.endswith(".app") and os.path.dirname(_dir) != _dir:
+            _dir = os.path.dirname(_dir)
+        _bundled = os.path.join(os.path.dirname(_dir), "ms-playwright") if _dir.endswith(".app") else ""
+    else:
+        _bundled = os.path.join(getattr(sys, "_MEIPASS", ""), "ms-playwright")
+    if _bundled and os.path.isdir(_bundled):
         os.environ["PLAYWRIGHT_BROWSERS_PATH"] = _bundled
 
 import asyncio
